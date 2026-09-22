@@ -27,7 +27,10 @@ class ArticlesToolInput(BaseModel):
     )
     body: Optional[str] = Field(
         default=None,
-        description="Article body/content. Required for create; optional for update.",
+        description=(
+            "Article body/content. For create, prefer providing body; "
+            "if omitted, a short body is derived from the title. Optional for update."
+        ),
     )
     user_id: Optional[int] = Field(
         default=1,
@@ -50,9 +53,15 @@ def call_articles_api(
     result: dict[str, Any]
     try:
         if operation == "create":
-            if not title or not body:
-                raise ValueError("create requires both title and body.")
-            result = create_article(title=title, body=body, user_id=user_id or 1)
+            if not title:
+                raise ValueError("create requires title.")
+            # Local models often omit body; derive a short default from the title.
+            resolved_body = (body or "").strip() or f"{title.strip()}."
+            result = create_article(
+                title=title.strip(),
+                body=resolved_body,
+                user_id=user_id or 1,
+            )
         elif operation == "get":
             if article_id is None:
                 raise ValueError("get requires article_id.")
@@ -87,7 +96,8 @@ articles_tool = StructuredTool.from_function(
     name="articles_api",
     description=(
         "Call the public Articles API. "
-        "Supported operations: create (title+body), get (article_id), "
+        "Supported operations: create (title required; body optional — "
+        "defaults from title), get (article_id), "
         "update (article_id + optional title/body/user_id). "
         "Returns a JSON string with ok, operation, article, and error fields."
     ),
